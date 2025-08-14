@@ -108,16 +108,46 @@ Resources:
     Properties:
       BucketName: !Sub "${Environment}-impulsame-user-documents"
       PublicAccessBlockConfiguration:
-        BlockPublicAcls: true
-        BlockPublicPolicy: true
-        IgnorePublicAcls: true
-        RestrictPublicBuckets: true
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
       VersioningConfiguration:
         Status: Enabled
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
               SSEAlgorithm: AES256
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders:
+              - "*"
+            AllowedMethods:
+              - GET
+              - HEAD
+            AllowedOrigins:
+              - !Sub "https://${Environment}-impulsame-user-documents.pulbot.store"
+            MaxAge: 3000
+
+  # Política del bucket S3 para permitir acceso de CloudFront
+  UserDocumentsBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref UserDocumentsBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowCloudFrontAccess
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub "${UserDocumentsBucket.Arn}/*"
+          - Sid: AllowPublicRead
+            Effect: Allow
+            Principal: "*"
+            Action: s3:GetObject
+            Resource: !Sub "${UserDocumentsBucket.Arn}/*"
 
 Outputs:
   ImpulsameApi:
@@ -137,3 +167,21 @@ Outputs:
     Value: !Ref UserDocumentsBucket
     Export:
       Name: !Sub "${Environment}-user-documents-bucket"
+
+  UserDocumentsBucketArn:
+    Description: "S3 Bucket ARN for user documents"
+    Value: !GetAtt UserDocumentsBucket.Arn
+    Export:
+      Name: !Sub "${Environment}-user-documents-bucket-arn"
+
+  UserDocumentsBucketDomainName:
+    Description: "S3 Bucket domain name for CloudFront origin"
+    Value: !GetAtt UserDocumentsBucket.RegionalDomainName
+    Export:
+      Name: !Sub "${Environment}-user-documents-bucket-domain"
+
+  ExpectedCloudFrontDomain:
+    Description: "Expected CloudFront domain name for this environment"
+    Value: !Sub "${Environment}-impulsame-user-documents.pulbot.store"
+    Export:
+      Name: !Sub "${Environment}-expected-cloudfront-domain"
