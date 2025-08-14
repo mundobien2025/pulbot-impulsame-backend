@@ -16,7 +16,13 @@ s3_bucket = "sam-artifacts-dev-impulsame"
 s3_prefix = "backend"
 region = "us-east-1"
 capabilities = "CAPABILITY_IAM"
-parameter_overrides = "Environment=dev"
+parameter_overrides = [
+    "Environment=dev",
+    "DbHost=TU_DB_HOST_DEV",
+    "DbUser=TU_DB_USER_DEV", 
+    "DbPass=TU_DB_PASS_DEV",
+    "DbName=impulsame_dev"
+]
 confirm_changeset = false
 fail_on_empty_changeset = false
 
@@ -26,6 +32,12 @@ s3_bucket = "sam-artifacts-main-impulsame"
 s3_prefix = "backend"
 region = "us-east-1"
 capabilities = "CAPABILITY_IAM"
-parameter_overrides = "Environment=main"
+parameter_overrides = [
+    "Environment=main",
+    "DbHost=TU_DB_HOST_MAIN",
+    "DbUser=TU_DB_USER_MAIN",
+    "DbPass=TU_DB_PASS_MAIN", 
+    "DbName=impulsame_main"
+]
 confirm_changeset = false
 fail_on_empty_changeset = false

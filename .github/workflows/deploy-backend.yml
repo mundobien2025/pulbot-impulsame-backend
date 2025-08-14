@@ -62,7 +62,23 @@ jobs:
 
     - name: Deploy SAM application
       run: |
-        sam deploy --config-env ${{ env.ENVIRONMENT }}
+        if [ "${{ env.ENVIRONMENT }}" = "dev" ]; then
+          sam deploy --config-env dev \
+            --parameter-overrides \
+              Environment=dev \
+              DbHost="${{ secrets.DEV_DB_HOST }}" \
+              DbUser="${{ secrets.DEV_DB_USER }}" \
+              DbPass="${{ secrets.DEV_DB_PASS }}" \
+              DbName="${{ secrets.DEV_DB_NAME }}"
+        else
+          sam deploy --config-env main \
+            --parameter-overrides \
+              Environment=main \
+              DbHost="${{ secrets.MAIN_DB_HOST }}" \
+              DbUser="${{ secrets.MAIN_DB_USER }}" \
+              DbPass="${{ secrets.MAIN_DB_PASS }}" \
+              DbName="${{ secrets.MAIN_DB_NAME }}"
+        fi
 
     - name: Get API Gateway URL
       run: |

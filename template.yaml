@@ -9,6 +9,22 @@ Parameters:
     AllowedValues: [dev, main]
     Default: dev
     Description: Environment name (dev or main)
+  DbHost:
+    Type: String
+    Description: Database host
+    NoEcho: true
+  DbUser:
+    Type: String
+    Description: Database username
+    NoEcho: true
+  DbPass:
+    Type: String
+    Description: Database password
+    NoEcho: true
+  DbName:
+    Type: String
+    Description: Database name
+    Default: impulsame_dev
 
 Globals:
   Function:
@@ -54,10 +70,10 @@ Resources:
       Handler: lambda_function.lambda_handler
       Environment:
         Variables:
-          DB_HOST: !Sub "{{resolve:secretsmanager:${Environment}-impulsame-db:SecretString:host}}"
-          DB_USER: !Sub "{{resolve:secretsmanager:${Environment}-impulsame-db:SecretString:username}}"
-          DB_PASS: !Sub "{{resolve:secretsmanager:${Environment}-impulsame-db:SecretString:password}}"
-          DB_NAME: !Sub "{{resolve:secretsmanager:${Environment}-impulsame-db:SecretString:dbname}}"
+          DB_HOST: !Ref DbHost
+          DB_USER: !Ref DbUser
+          DB_PASS: !Ref DbPass
+          DB_NAME: !Ref DbName
           AWS_BUCKET_USER_DATOS: !Ref UserDocumentsBucket
       Policies:
         - Version: '2012-10-17'
@@ -68,10 +84,6 @@ Resources:
                 - s3:PutObjectAcl
                 - s3:GetObject
               Resource: !Sub "${UserDocumentsBucket}/*"
-            - Effect: Allow
-              Action:
-                - secretsmanager:GetSecretValue
-              Resource: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${Environment}-impulsame-db*"
             - Effect: Allow
               Action:
                 - logs:CreateLogGroup
