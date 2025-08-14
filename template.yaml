@@ -29,7 +29,7 @@ Parameters:
 Globals:
   Function:
     Timeout: 30
-    Runtime: python3.9
+    Runtime: python3.13
     Environment:
       Variables:
         ENVIRONMENT: !Ref Environment
@@ -57,9 +57,9 @@ Resources:
       Description: Dependencias Python compartidas
       ContentUri: layers/python-deps/
       CompatibleRuntimes:
-        - python3.9
+        - python3.13
     Metadata:
-      BuildMethod: python3.9
+      BuildMethod: python3.13
 
   # Función Lambda: Users Register
   UsersRegisterFunction:

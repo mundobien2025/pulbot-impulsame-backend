@@ -24,7 +24,7 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-version: '3.9'
+        python-version: '3.13'
 
     - name: Set up AWS SAM CLI
       uses: aws-actions/setup-sam@v2
@@ -42,8 +42,10 @@ jobs:
       run: |
         if [ "${{ github.ref }}" = "refs/heads/main" ]; then
           echo "ENVIRONMENT=main" >> $GITHUB_ENV
-        else
+        elif [ "${{ github.ref }}" = "refs/heads/dev" ]; then
           echo "ENVIRONMENT=dev" >> $GITHUB_ENV
+        else
+          echo "ENVIRONMENT=dev" >> $GITHUB_ENV  # Por defecto dev para feature branches
         fi
 
     - name: Install dependencies in layer
