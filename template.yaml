@@ -83,7 +83,11 @@ Resources:
                 - s3:PutObject
                 - s3:PutObjectAcl
                 - s3:GetObject
-              Resource: !Sub "${UserDocumentsBucket}/*"
+              Resource: !Sub "${UserDocumentsBucket.Arn}/*"
+            - Effect: Allow
+              Action:
+                - s3:ListBucket
+              Resource: !GetAtt UserDocumentsBucket.Arn
             - Effect: Allow
               Action:
                 - logs:CreateLogGroup
