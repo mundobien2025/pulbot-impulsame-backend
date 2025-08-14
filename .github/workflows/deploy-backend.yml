@@ -62,6 +62,34 @@ jobs:
         BUCKET_NAME="sam-artifacts-${{ env.ENVIRONMENT }}-impulsame"
         aws s3 mb s3://$BUCKET_NAME --region ${{ env.AWS_REGION }} || echo "Bucket already exists"
 
+    - name: Check and fix CloudFormation stack state
+      run: |
+        STACK_NAME="${{ env.ENVIRONMENT }}-impulsame-backend"
+        STACK_STATUS=$(aws cloudformation describe-stacks \
+          --stack-name $STACK_NAME \
+          --region ${{ env.AWS_REGION }} \
+          --query 'Stacks[0].StackStatus' \
+          --output text 2>/dev/null || echo "STACK_NOT_EXISTS")
+        
+        echo "Stack status: $STACK_STATUS"
+        
+        if [ "$STACK_STATUS" = "ROLLBACK_COMPLETE" ]; then
+          echo "Stack is in ROLLBACK_COMPLETE state. Deleting stack..."
+          aws cloudformation delete-stack \
+            --stack-name $STACK_NAME \
+            --region ${{ env.AWS_REGION }}
+          
+          echo "Waiting for stack deletion to complete..."
+          aws cloudformation wait stack-delete-complete \
+            --stack-name $STACK_NAME \
+            --region ${{ env.AWS_REGION }}
+          
+          echo "Stack deleted successfully"
+        elif [ "$STACK_STATUS" = "DELETE_FAILED" ]; then
+          echo "Stack deletion failed previously. Manual intervention required."
+          exit 1
+        fi
+
     - name: Deploy SAM application
       run: |
         if [ "${{ env.ENVIRONMENT }}" = "dev" ]; then
