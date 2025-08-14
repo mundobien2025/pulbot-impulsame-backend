@@ -168,3 +168,22 @@ jobs:
           --region ${{ env.AWS_REGION }})
         echo "API Gateway URL: $API_URL"
         echo "::notice::API Gateway deployed at $API_URL"
+
+    - name: Upload static files to S3 bucket
+      run: |
+        BUCKET_NAME="${{ env.ENVIRONMENT }}-impulsame-user-documents.pulbot.store"
+        
+        # Upload index.html
+        aws s3 cp static-files/index.html s3://$BUCKET_NAME/index.html \
+          --content-type "text/html" \
+          --cache-control "max-age=300"
+        
+        # Get website URL
+        WEBSITE_URL=$(aws cloudformation describe-stacks \
+          --stack-name ${{ env.ENVIRONMENT }}-impulsame-backend \
+          --query 'Stacks[0].Outputs[?OutputKey==`UserDocumentsBucketWebsiteUrl`].OutputValue' \
+          --output text \
+          --region ${{ env.AWS_REGION }})
+        
+        echo "S3 Website URL: $WEBSITE_URL"
+        echo "::notice::S3 Website available at $WEBSITE_URL"

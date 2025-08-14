@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Impulsame - Documentos de Usuario</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 40px;
+            background: linear-gradient(135deg, #004884 0%, #32B18F 100%);
+            color: white;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        .container {
+            text-align: center;
+            max-width: 600px;
+        }
+        .logo {
+            font-size: 3rem;
+            font-weight: bold;
+            margin-bottom: 2rem;
+        }
+        .message {
+            font-size: 1.2rem;
+            margin-bottom: 2rem;
+            line-height: 1.6;
+        }
+        .info {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 2rem;
+        }
+        .status {
+            color: #32B18F;
+            font-weight: bold;
+        }
+        .rocket {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="rocket">🚀</div>
+        <div class="logo">IMPULSAME</div>
+        <div class="message">
+            <p>Sistema de documentos de usuario funcionando correctamente.</p>
+            <p>Este es el punto de acceso para los archivos de usuarios del sistema Impulsame.</p>
+        </div>
+        <div class="info">
+            <p><strong>Ambiente:</strong> <span class="status">Desarrollo</span></p>
+            <p><strong>Servicio:</strong> <span class="status">Activo</span></p>
+            <p><strong>Versión:</strong> 1.0.0</p>
+        </div>
+    </div>
+    
+    <script>
+        // Detectar ambiente basado en URL
+        const hostname = window.location.hostname;
+        const isProduction = hostname.includes('main-impulsame');
+        const environment = isProduction ? 'Producción' : 'Desarrollo';
+        
+        // Actualizar ambiente en la página
+        document.querySelector('.status').textContent = environment;
+        
+        console.log('Impulsame Documents Service - Environment:', environment);
+    </script>
+</body>
+</html>

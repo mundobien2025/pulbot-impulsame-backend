@@ -139,7 +139,7 @@ Resources:
   UserDocumentsBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: !Sub "${Environment}-impulsame-user-documents"
+      BucketName: !Sub "${Environment}-impulsame-user-documents.pulbot.store"
       PublicAccessBlockConfiguration:
         BlockPublicAcls: false
         BlockPublicPolicy: false
@@ -151,6 +151,9 @@ Resources:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
               SSEAlgorithm: AES256
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: index.html
       CorsConfiguration:
         CorsRules:
           - AllowedHeaders:
@@ -158,8 +161,11 @@ Resources:
             AllowedMethods:
               - GET
               - HEAD
+              - PUT
+              - POST
             AllowedOrigins:
               - !Sub "https://${Environment}-impulsame-user-documents.pulbot.store"
+              - "*"
             MaxAge: 3000
 
   # Política del bucket S3 para permitir acceso de CloudFront
@@ -212,6 +218,12 @@ Outputs:
     Value: !GetAtt UserDocumentsBucket.RegionalDomainName
     Export:
       Name: !Sub "${Environment}-user-documents-bucket-domain"
+
+  UserDocumentsBucketWebsiteUrl:
+    Description: "S3 Bucket website URL"
+    Value: !GetAtt UserDocumentsBucket.WebsiteURL
+    Export:
+      Name: !Sub "${Environment}-user-documents-website-url"
 
   ExpectedCloudFrontDomain:
     Description: "Expected CloudFront domain name for this environment"
