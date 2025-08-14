@@ -55,15 +55,14 @@ jobs:
       run: |
         sam build --use-container
 
+    - name: Create S3 bucket for SAM artifacts (if not exists)
+      run: |
+        BUCKET_NAME="sam-artifacts-${{ env.ENVIRONMENT }}-impulsame"
+        aws s3 mb s3://$BUCKET_NAME --region ${{ env.AWS_REGION }} || echo "Bucket already exists"
+
     - name: Deploy SAM application
       run: |
-        sam deploy \
-          --stack-name ${{ env.ENVIRONMENT }}-impulsame-backend \
-          --parameter-overrides Environment=${{ env.ENVIRONMENT }} \
-          --capabilities CAPABILITY_IAM \
-          --region ${{ env.AWS_REGION }} \
-          --no-confirm-changeset \
-          --no-fail-on-empty-changeset
+        sam deploy --config-env ${{ env.ENVIRONMENT }}
 
     - name: Get API Gateway URL
       run: |
