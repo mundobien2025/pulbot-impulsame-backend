@@ -1,0 +1,123 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Impulsame Backend API
+
+Parameters:
+  Environment:
+    Type: String
+    AllowedValues: [dev, main]
+    Default: dev
+    Description: Environment name (dev or main)
+
+Globals:
+  Function:
+    Timeout: 30
+    Runtime: python3.9
+    Environment:
+      Variables:
+        ENVIRONMENT: !Ref Environment
+    Layers:
+      - !Ref PythonDependenciesLayer
+
+Resources:
+  # API Gateway
+  ImpulsameApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: !Sub "${Environment}-impulsame-api"
+      StageName: !Ref Environment
+      Cors:
+        AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
+        AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+        AllowOrigin: "'*'"
+        MaxAge: "'600'"
+
+  # Lambda Layer para dependencias Python
+  PythonDependenciesLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: !Sub "${Environment}-python-dependencies"
+      Description: Dependencias Python compartidas
+      ContentUri: layers/python-deps/
+      CompatibleRuntimes:
+        - python3.9
+    Metadata:
+      BuildMethod: python3.9
+
+  # Función Lambda: Users Register
+  UsersRegisterFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${Environment}-users-register"
+      CodeUri: lambdas/users-register-post/
+      Handler: lambda_function.lambda_handler
+      Environment:
+        Variables:
+          DB_HOST: !Sub "{{resolve:secretsmanager:${Environment}-impulsame-db:SecretString:host}}"
+          DB_USER: !Sub "{{resolve:secretsmanager:${Environment}-impulsame-db:SecretString:username}}"
+          DB_PASS: !Sub "{{resolve:secretsmanager:${Environment}-impulsame-db:SecretString:password}}"
+          DB_NAME: !Sub "{{resolve:secretsmanager:${Environment}-impulsame-db:SecretString:dbname}}"
+          AWS_BUCKET_USER_DATOS: !Ref UserDocumentsBucket
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - s3:PutObject
+                - s3:PutObjectAcl
+                - s3:GetObject
+              Resource: !Sub "${UserDocumentsBucket}/*"
+            - Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+              Resource: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${Environment}-impulsame-db*"
+            - Effect: Allow
+              Action:
+                - logs:CreateLogGroup
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+              Resource: "*"
+      Events:
+        RegisterApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ImpulsameApi
+            Path: /users/register
+            Method: post
+
+  # S3 Bucket para documentos de usuarios
+  UserDocumentsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${Environment}-impulsame-user-documents"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+
+Outputs:
+  ImpulsameApi:
+    Description: "API Gateway endpoint URL"
+    Value: !Sub "https://${ImpulsameApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/"
+    Export:
+      Name: !Sub "${Environment}-impulsame-api-url"
+
+  UsersRegisterFunction:
+    Description: "Users Register Lambda Function ARN"
+    Value: !GetAtt UsersRegisterFunction.Arn
+    Export:
+      Name: !Sub "${Environment}-users-register-function-arn"
+
+  UserDocumentsBucket:
+    Description: "S3 Bucket for user documents"
+    Value: !Ref UserDocumentsBucket
+    Export:
+      Name: !Sub "${Environment}-user-documents-bucket"

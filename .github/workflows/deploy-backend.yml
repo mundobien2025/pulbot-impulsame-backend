@@ -1,0 +1,76 @@
+name: Deploy Backend to AWS
+
+on:
+  push:
+    branches: 
+      - dev
+      - main
+    paths:
+      - 'lambdas/**'
+      - 'template.yaml'
+      - 'layers/**'
+      - '.github/workflows/deploy-backend.yml'
+
+env:
+  AWS_REGION: us-east-1
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.9'
+
+    - name: Set up AWS SAM CLI
+      uses: aws-actions/setup-sam@v2
+      with:
+        use-installer: true
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Set environment based on branch
+      run: |
+        if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+          echo "ENVIRONMENT=main" >> $GITHUB_ENV
+        else
+          echo "ENVIRONMENT=dev" >> $GITHUB_ENV
+        fi
+
+    - name: Install dependencies in layer
+      run: |
+        mkdir -p layers/python-deps/python
+        pip install -r lambdas/users-register-post/requirements.txt -t layers/python-deps/python/
+
+    - name: Build SAM application
+      run: |
+        sam build --use-container
+
+    - name: Deploy SAM application
+      run: |
+        sam deploy \
+          --stack-name ${{ env.ENVIRONMENT }}-impulsame-backend \
+          --parameter-overrides Environment=${{ env.ENVIRONMENT }} \
+          --capabilities CAPABILITY_IAM \
+          --region ${{ env.AWS_REGION }} \
+          --no-confirm-changeset \
+          --no-fail-on-empty-changeset
+
+    - name: Get API Gateway URL
+      run: |
+        API_URL=$(aws cloudformation describe-stacks \
+          --stack-name ${{ env.ENVIRONMENT }}-impulsame-backend \
+          --query 'Stacks[0].Outputs[?OutputKey==`ImpulsameApi`].OutputValue' \
+          --output text \
+          --region ${{ env.AWS_REGION }})
+        echo "API Gateway URL: $API_URL"
+        echo "::notice::API Gateway deployed at $API_URL"
