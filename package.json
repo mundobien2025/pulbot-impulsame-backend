@@ -1,0 +1,29 @@
+{
+  "name": "impulsame-backend",
+  "version": "0.1.0",
+  "description": "Impulsame Backend API - AWS SAM Application",
+  "main": "template.yaml",
+  "scripts": {
+    "build": "sam build",
+    "deploy:dev": "sam deploy --config-env dev",
+    "deploy:main": "sam deploy --config-env main",
+    "local": "sam local start-api",
+    "test": "python -m pytest tests/ -v"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mundobien2025/pulbot-impulsame-backend"
+  },
+  "keywords": [
+    "aws",
+    "sam",
+    "lambda",
+    "api-gateway",
+    "impulsame",
+    "backend"
+  ],
+  "author": "Impulsame Team",
+  "license": "MIT",
+  "devDependencies": {},
+  "dependencies": {}
+}
