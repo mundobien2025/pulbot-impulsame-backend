@@ -138,7 +138,12 @@ jobs:
               DbHost="${{ secrets.DEV_DB_HOST }}" \
               DbUser="${{ secrets.DEV_DB_USER }}" \
               DbPass="${{ secrets.DEV_DB_PASS }}" \
-              DbName="${{ secrets.DEV_DB_NAME }}"
+              DbName="${{ secrets.DEV_DB_NAME }}" \
+              VpcId="${{ secrets.VPC_ID }}" \
+              SubnetId1="${{ secrets.SUBNET_ID_1 }}" \
+              SubnetId2="${{ secrets.SUBNET_ID_2 || '' }}" \
+              SubnetId3="${{ secrets.SUBNET_ID_3 || '' }}" \
+              SecurityGroupId="${{ secrets.SECURITY_GROUP_ID }}"
         else
           sam deploy --config-env main \
             --parameter-overrides \
@@ -146,7 +151,12 @@ jobs:
               DbHost="${{ secrets.MAIN_DB_HOST }}" \
               DbUser="${{ secrets.MAIN_DB_USER }}" \
               DbPass="${{ secrets.MAIN_DB_PASS }}" \
-              DbName="${{ secrets.MAIN_DB_NAME }}"
+              DbName="${{ secrets.MAIN_DB_NAME }}" \
+              VpcId="${{ secrets.VPC_ID }}" \
+              SubnetId1="${{ secrets.SUBNET_ID_1 }}" \
+              SubnetId2="${{ secrets.SUBNET_ID_2 || '' }}" \
+              SubnetId3="${{ secrets.SUBNET_ID_3 || '' }}" \
+              SecurityGroupId="${{ secrets.SECURITY_GROUP_ID }}"
         fi
 
     - name: Get API Gateway URL

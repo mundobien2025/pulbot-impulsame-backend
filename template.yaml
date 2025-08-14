@@ -25,6 +25,26 @@ Parameters:
     Type: String
     Description: Database name
     Default: impulsame_dev
+  VpcId:
+    Type: String
+    Description: VPC ID for Lambda functions
+    Default: vpc-07a2057b856abc88a
+  SubnetId1:
+    Type: String
+    Description: First subnet ID for Lambda functions
+    Default: subnet-0a4c6ec40547ef6bc
+  SubnetId2:
+    Type: String
+    Description: Second subnet ID for Lambda functions (optional)
+    Default: ""
+  SubnetId3:
+    Type: String
+    Description: Third subnet ID for Lambda functions (optional)
+    Default: ""
+  SecurityGroupId:
+    Type: String
+    Description: Security Group ID for Lambda functions
+    Default: sg-041ca83b054423bae
 
 Globals:
   Function:
@@ -35,6 +55,11 @@ Globals:
         ENVIRONMENT: !Ref Environment
     Layers:
       - !Ref PythonDependenciesLayer
+    VpcConfig:
+      SecurityGroupIds:
+        - !Ref SecurityGroupId
+      SubnetIds:
+        - !Ref SubnetId1
 
 Resources:
   # API Gateway
@@ -93,6 +118,14 @@ Resources:
                 - logs:CreateLogGroup
                 - logs:CreateLogStream
                 - logs:PutLogEvents
+              Resource: "*"
+            - Effect: Allow
+              Action:
+                - ec2:CreateNetworkInterface
+                - ec2:DescribeNetworkInterfaces
+                - ec2:DeleteNetworkInterface
+                - ec2:AttachNetworkInterface
+                - ec2:DetachNetworkInterface
               Resource: "*"
       Events:
         RegisterApi:

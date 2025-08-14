@@ -21,7 +21,12 @@ parameter_overrides = [
     "DbHost=TU_DB_HOST_DEV",
     "DbUser=TU_DB_USER_DEV", 
     "DbPass=TU_DB_PASS_DEV",
-    "DbName=impulsame_dev"
+    "DbName=impulsame_dev",
+    "VpcId=vpc-07a2057b856abc88a",
+    "SubnetId1=subnet-0a4c6ec40547ef6bc",
+    "SubnetId2=",
+    "SubnetId3=",
+    "SecurityGroupId=sg-041ca83b054423bae"
 ]
 confirm_changeset = false
 fail_on_empty_changeset = false
@@ -37,7 +42,12 @@ parameter_overrides = [
     "DbHost=TU_DB_HOST_MAIN",
     "DbUser=TU_DB_USER_MAIN",
     "DbPass=TU_DB_PASS_MAIN", 
-    "DbName=impulsame_main"
+    "DbName=impulsame_main",
+    "VpcId=vpc-07a2057b856abc88a",
+    "SubnetId1=subnet-0a4c6ec40547ef6bc",
+    "SubnetId2=",
+    "SubnetId3=",
+    "SecurityGroupId=sg-041ca83b054423bae"
 ]
 confirm_changeset = false
 fail_on_empty_changeset = false
