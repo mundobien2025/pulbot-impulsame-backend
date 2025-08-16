@@ -4,9 +4,7 @@ import pymysql
 from datetime import datetime
 import uuid
 import json
-import base64
 import logging
-import re
 
 # Configure logging
 logger = logging.getLogger()
@@ -18,9 +16,6 @@ DB_USER = os.environ.get('DB_USER')
 DB_PASS = os.environ.get('DB_PASS')
 DB_NAME = os.environ.get('DB_NAME', 'impulsame_dev')
 AWS_BUCKET = os.environ.get('AWS_BUCKET_USER_DATOS')
-
-# Initialize S3 client
-s3_client = boto3.client('s3')
 
 def lambda_handler(event, context):
     try:
@@ -66,7 +61,7 @@ def lambda_handler(event, context):
                 'body': json.dumps({'error': f'Invalid JSON: {str(e)}'})
             }
         
-        # Validate required fields
+        # Validate required fields (solo campos de texto)
         required_fields = ['email', 'full_name', 'ci', 'phone1']
         missing_fields = [field for field in required_fields if not body.get(field)]
         
@@ -80,64 +75,54 @@ def lambda_handler(event, context):
                 })
             }
         
+        # Validate email format
+        email = body.get('email', '').strip().lower()
+        if not email or '@' not in email:
+            return {
+                'statusCode': 400,
+                'headers': cors_headers,
+                'body': json.dumps({'error': 'Valid email is required'})
+            }
+        
         # Generate user ID
         user_id = str(uuid.uuid4())
         logger.info(f"Generated user ID: {user_id}")
         
-        # Process user data
+        # Process user data (solo texto, sin archivos)
         user_data = prepare_user_data(body, user_id)
         
-        # Generate folder structure
+        # Generate folder name for future file uploads
         folder_name = generate_folder_name(body['ci'], body['full_name'])
-        logger.info(f"Generated folder name: {folder_name}")
+        logger.info(f"Generated folder name for future uploads: {folder_name}")
         
-        # Start transaction process
+        # Database transaction
         connection = None
-        uploaded_files = []
         
         try:
             # Get database connection
             connection = get_database_connection()
             
-            # Upload files to S3 first
-            file_paths = {}
-            file_mapping = {
-                'id_file': 'cedula',
-                'rif_file': 'rif',
-                'ref1_id': 'ref1_cedula',
-                'ref2_id': 'ref2_cedula',
-                'work_cert': 'constancia_laboral'
-            }
+            # Check if email already exists
+            if email_exists(connection, email):
+                return {
+                    'statusCode': 409,
+                    'headers': cors_headers,
+                    'body': json.dumps({
+                        'error': 'Email already registered',
+                        'message': 'A user with this email already exists'
+                    })
+                }
             
-            for form_field, file_type in file_mapping.items():
-                if body.get(form_field):
-                    file_data = body[form_field]
-                    if isinstance(file_data, dict) and file_data.get('data'):
-                        try:
-                            # Decode base64 file
-                            file_content = base64.b64decode(file_data['data'])
-                            
-                            # Determine file extension
-                            content_type = file_data.get('content_type', 'application/pdf')
-                            extension = get_file_extension(content_type)
-                            
-                            # Generate file key
-                            file_key = generate_file_key(body['ci'], file_type, extension)
-                            full_key = f"{folder_name}/{file_key}"
-                            
-                            # Upload to S3
-                            s3_url = upload_to_s3(full_key, file_content, content_type)
-                            file_paths[f"{file_type}_path"] = s3_url
-                            uploaded_files.append(full_key)
-                            
-                            logger.info(f"Uploaded {form_field} to {s3_url}")
-                            
-                        except Exception as e:
-                            logger.error(f"Error processing file {form_field}: {str(e)}")
-                            # Continue with other files, this one will be null in DB
-            
-            # Add file paths to user data
-            user_data.update(file_paths)
+            # Check if CI already exists
+            if ci_exists(connection, body['ci']):
+                return {
+                    'statusCode': 409,
+                    'headers': cors_headers,
+                    'body': json.dumps({
+                        'error': 'CI already registered',
+                        'message': 'A user with this CI already exists'
+                    })
+                }
             
             # Insert user into database
             insert_user_to_database(connection, user_data)
@@ -155,8 +140,9 @@ def lambda_handler(event, context):
                     'full_name': user_data['full_name'],
                     'ci': user_data['ci'],
                     'phone1': user_data['phone1'],
-                    'folder': folder_name,
-                    'files_uploaded': len(uploaded_files)
+                    'folder_name': folder_name,
+                    'files_uploaded': False,
+                    'next_step': 'Upload documents using /users/upload-documents endpoint'
                 },
                 'environment': os.environ.get('ENVIRONMENT', 'unknown'),
                 'timestamp': datetime.now().isoformat()
@@ -169,7 +155,7 @@ def lambda_handler(event, context):
             }
             
         except Exception as e:
-            logger.error(f"Transaction failed: {str(e)}", exc_info=True)
+            logger.error(f"Database transaction failed: {str(e)}", exc_info=True)
             
             # Rollback database changes
             if connection:
@@ -178,14 +164,6 @@ def lambda_handler(event, context):
                     logger.info("Database transaction rolled back")
                 except Exception as rollback_error:
                     logger.error(f"Error during rollback: {str(rollback_error)}")
-            
-            # Clean up uploaded files from S3
-            for file_key in uploaded_files:
-                try:
-                    s3_client.delete_object(Bucket=AWS_BUCKET, Key=file_key)
-                    logger.info(f"Cleaned up S3 file: {file_key}")
-                except Exception as cleanup_error:
-                    logger.error(f"Error cleaning up S3 file {file_key}: {str(cleanup_error)}")
             
             return {
                 'statusCode': 500,
@@ -216,91 +194,6 @@ def lambda_handler(event, context):
             })
         }
 
-def clean_name(name):
-    """
-    Limpia el nombre dejando solo caracteres ASCII 65-90 (A-Z) y 97-122 (a-z)
-    Capitaliza la primera letra de cada palabra y separa con guión bajo
-    """
-    # Remover caracteres no ASCII válidos
-    clean_chars = []
-    for char in name:
-        if (65 <= ord(char) <= 90) or (97 <= ord(char) <= 122) or char == ' ':
-            clean_chars.append(char)
-    
-    clean_name = ''.join(clean_chars)
-    
-    # Dividir por espacios, capitalizar y unir con guión bajo
-    words = [word.capitalize() for word in clean_name.split() if word]
-    return '_'.join(words)
-
-def generate_folder_name(ci, full_name):
-    """
-    Genera el nombre de la carpeta: ddmmaaaa-cedula-nombre_limpio
-    """
-    # Fecha actual en formato ddmmaaaa
-    now = datetime.now()
-    date_str = now.strftime("%d%m%Y")
-    
-    # Limpiar nombre
-    cleaned_name = clean_name(full_name)
-    
-    return f"{date_str}-{ci}-{cleaned_name}"
-
-def generate_file_key(ci, file_type, extension):
-    """
-    Genera el nombre del archivo: ddmmaaaa-cedula-tipo_documento.extension
-    """
-    now = datetime.now()
-    date_str = now.strftime("%d%m%Y")
-    
-    return f"{date_str}-{ci}-{file_type}.{extension}"
-
-def get_file_extension(content_type):
-    """
-    Determina la extensión del archivo basada en el content_type
-    """
-    extensions = {
-        'application/pdf': 'pdf',
-        'image/jpeg': 'jpg',
-        'image/jpg': 'jpg',
-        'image/png': 'png',
-        'image/gif': 'gif',
-        'application/msword': 'doc',
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'doc'
-    }
-    return extensions.get(content_type, 'pdf')
-
-def prepare_user_data(body, user_id):
-    """
-    Prepara los datos del usuario para inserción en la base de datos
-    """
-    now = datetime.now()
-    
-    user_data = {
-        'id': user_id,
-        'email': body.get('email'),
-        'full_name': body.get('full_name'),
-        'birth_date': body.get('birth_date'),
-        'ci': body.get('ci'),
-        'phone1': body.get('phone1'),
-        'phone2': body.get('phone2'),
-        'address': body.get('address'),
-        'instagram': body.get('instagram'),
-        'facebook': body.get('facebook'),
-        'tiktok': body.get('tiktok'),
-        'ref1_name': body.get('ref1_name'),
-        'ref1_relation': body.get('ref1_relation'),
-        'ref2_name': body.get('ref2_name'),
-        'ref2_relation': body.get('ref2_relation'),
-        'monthly_income': float(body.get('monthly_income', 0)) if body.get('monthly_income') else None,
-        'activity_type': body.get('activity_type'),
-        'position': body.get('position'),
-        'created_at': now,
-        'updated_at': now
-    }
-    
-    return user_data
-
 def get_database_connection():
     """
     Establece conexión con la base de datos MySQL
@@ -321,51 +214,34 @@ def get_database_connection():
         logger.error(f"Database connection failed: {str(e)}")
         raise e
 
-def insert_user_to_database(connection, user_data):
+# Funciones de utilidad para archivos (para futuro endpoint de upload)
+def clean_name(name):
     """
-    Inserta el usuario en la base de datos
+    Limpia el nombre dejando solo caracteres ASCII 65-90 (A-Z) y 97-122 (a-z)
+    Capitaliza la primera letra de cada palabra y separa con guión bajo
     """
-    try:
-        with connection.cursor() as cursor:
-            # SQL para insertar usuario
-            sql = """
-            INSERT INTO users (
-                id, email, full_name, birth_date, ci, phone1, phone2, address,
-                instagram, facebook, tiktok, ref1_name, ref1_relation, ref2_name, ref2_relation,
-                monthly_income, activity_type, position, id_file_path, rif_file_path,
-                ref1_id_path, ref2_id_path, work_cert_path, created_at, updated_at
-            ) VALUES (
-                %(id)s, %(email)s, %(full_name)s, %(birth_date)s, %(ci)s, %(phone1)s, %(phone2)s, %(address)s,
-                %(instagram)s, %(facebook)s, %(tiktok)s, %(ref1_name)s, %(ref1_relation)s, %(ref2_name)s, %(ref2_relation)s,
-                %(monthly_income)s, %(activity_type)s, %(position)s, %(cedula_path)s, %(rif_path)s,
-                %(ref1_cedula_path)s, %(ref2_cedula_path)s, %(constancia_laboral_path)s, %(created_at)s, %(updated_at)s
-            )
-            """
-            
-            cursor.execute(sql, user_data)
-            logger.info(f"User inserted into database with ID: {user_data['id']}")
-            
-    except Exception as e:
-        logger.error(f"Database insertion failed: {str(e)}")
-        raise e
+    # Remover caracteres no ASCII válidos
+    clean_chars = []
+    for char in name:
+        if (65 <= ord(char) <= 90) or (97 <= ord(char) <= 122) or char == ' ':
+            clean_chars.append(char)
+    
+    clean_name = ''.join(clean_chars)
+    
+    # Dividir por espacios, capitalizar y unir con guión bajo
+    words = [word.capitalize() for word in clean_name.split() if word]
+    return '_'.join(words)
 
-def upload_to_s3(key, data, content_type='application/octet-stream'):
+def generate_folder_name(ci, full_name):
     """
-    Sube un archivo a S3
+    Genera el nombre de la carpeta: ddmmaaaa-cedula-nombre_limpio
+    Para futuro uso en endpoint de upload de archivos
     """
-    try:
-        s3_client.put_object(
-            Bucket=AWS_BUCKET,
-            Key=key,
-            Body=data,
-            ContentType=content_type,
-            ServerSideEncryption='AES256'
-        )
-        
-        s3_url = f"s3://{AWS_BUCKET}/{key}"
-        logger.info(f"File uploaded to S3: {s3_url}")
-        return s3_url
-        
-    except Exception as e:
-        logger.error(f"S3 upload failed for key {key}: {str(e)}")
-        raise e
+    # Fecha actual en formato ddmmaaaa
+    now = datetime.now()
+    date_str = now.strftime("%d%m%Y")
+    
+    # Limpiar nombre
+    cleaned_name = clean_name(full_name)
+    
+    return f"{date_str}-{ci}-{cleaned_name}"
