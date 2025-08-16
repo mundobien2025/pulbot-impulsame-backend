@@ -194,6 +194,45 @@ def lambda_handler(event, context):
             })
         }
 
+def prepare_user_data(body, user_id):
+    """
+    Prepara los datos del usuario para inserción en la base de datos (solo texto)
+    """
+    now = datetime.now()
+    
+    user_data = {
+        'id': user_id,
+        'email': body.get('email', '').strip().lower(),
+        'full_name': body.get('full_name'),
+        'birth_date': body.get('birth_date'),
+        'ci': body.get('ci'),
+        'phone1': body.get('phone1'),
+        'phone2': body.get('phone2'),
+        'address': body.get('address'),
+        'instagram': body.get('instagram'),
+        'facebook': body.get('facebook'),
+        'tiktok': body.get('tiktok'),
+        'ref1_name': body.get('ref1_name'),
+        'ref1_relation': body.get('ref1_relation'),
+        'ref2_name': body.get('ref2_name'),
+        'ref2_relation': body.get('ref2_relation'),
+        'monthly_income': float(body.get('monthly_income', 0)) if body.get('monthly_income') else None,
+        'activity_type': body.get('activity_type'),
+        'position': body.get('position'),
+        'created_at': now,
+        'updated_at': now,
+        # Archivos se setean como NULL por defecto
+        'id_file_path': None,
+        'rif_file_path': None,
+        'ref1_id_path': None,
+        'ref2_id_path': None,
+        'work_cert_path': None,
+        'files_uploaded': False,
+        'files_upload_date': None
+    }
+    
+    return user_data
+
 def get_database_connection():
     """
     Establece conexión con la base de datos MySQL
@@ -212,6 +251,64 @@ def get_database_connection():
         return connection
     except Exception as e:
         logger.error(f"Database connection failed: {str(e)}")
+        raise e
+
+def insert_user_to_database(connection, user_data):
+    """
+    Inserta el usuario en la base de datos (solo datos de texto)
+    """
+    try:
+        with connection.cursor() as cursor:
+            # SQL para insertar usuario
+            sql = """
+            INSERT INTO users (
+                id, email, full_name, birth_date, ci, phone1, phone2, address,
+                instagram, facebook, tiktok, ref1_name, ref1_relation, ref2_name, ref2_relation,
+                monthly_income, activity_type, position, id_file_path, rif_file_path,
+                ref1_id_path, ref2_id_path, work_cert_path, files_uploaded, files_upload_date,
+                created_at, updated_at
+            ) VALUES (
+                %(id)s, %(email)s, %(full_name)s, %(birth_date)s, %(ci)s, %(phone1)s, %(phone2)s, %(address)s,
+                %(instagram)s, %(facebook)s, %(tiktok)s, %(ref1_name)s, %(ref1_relation)s, %(ref2_name)s, %(ref2_relation)s,
+                %(monthly_income)s, %(activity_type)s, %(position)s, %(id_file_path)s, %(rif_file_path)s,
+                %(ref1_id_path)s, %(ref2_id_path)s, %(work_cert_path)s, %(files_uploaded)s, %(files_upload_date)s,
+                %(created_at)s, %(updated_at)s
+            )
+            """
+            
+            cursor.execute(sql, user_data)
+            logger.info(f"User inserted into database with ID: {user_data['id']}")
+            
+    except Exception as e:
+        logger.error(f"Database insertion failed: {str(e)}")
+        raise e
+
+def email_exists(connection, email):
+    """
+    Verifica si el email ya existe en la base de datos
+    """
+    try:
+        with connection.cursor() as cursor:
+            sql = "SELECT COUNT(*) as count FROM users WHERE email = %s"
+            cursor.execute(sql, (email,))
+            result = cursor.fetchone()
+            return result['count'] > 0
+    except Exception as e:
+        logger.error(f"Error checking email existence: {str(e)}")
+        raise e
+
+def ci_exists(connection, ci):
+    """
+    Verifica si la CI ya existe en la base de datos
+    """
+    try:
+        with connection.cursor() as cursor:
+            sql = "SELECT COUNT(*) as count FROM users WHERE ci = %s"
+            cursor.execute(sql, (ci,))
+            result = cursor.fetchone()
+            return result['count'] > 0
+    except Exception as e:
+        logger.error(f"Error checking CI existence: {str(e)}")
         raise e
 
 # Funciones de utilidad para archivos (para futuro endpoint de upload)
