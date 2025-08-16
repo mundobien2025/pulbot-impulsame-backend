@@ -48,7 +48,7 @@ Parameters:
 
 Globals:
   Function:
-    Timeout: 300  # Aumentar a 5 minutos para procesar archivos
+    Timeout: 60  # Reducir a 60 segundos para solo texto
     Runtime: python3.13
     Environment:
       Variables:
@@ -93,8 +93,8 @@ Resources:
       FunctionName: !Sub "${Environment}-users-register"
       CodeUri: lambdas/users-register-post/
       Handler: lambda_function.lambda_handler
-      Timeout: 300  # 5 minutos específicamente para este Lambda
-      MemorySize: 512  # Aumentar memoria para procesar archivos base64
+      Timeout: 60  # Suficiente para solo procesar texto
+      MemorySize: 256  # Reducir memoria ya que no procesamos archivos base64
       Environment:
         Variables:
           DB_HOST: !Ref DbHost
