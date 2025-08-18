@@ -138,6 +138,50 @@ Resources:
             Path: /users/register
             Method: post
 
+  # Función Lambda: Request Files Get Upload URLs (FUERA DE VPC)
+  RequestFilesGetUploadUrlsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${Environment}-request-files-get-upload-urls"
+      CodeUri: lambdas/request-files-get-upload-urls/
+      Handler: app.lambda_handler
+      Runtime: python3.13
+      Timeout: 30
+      MemorySize: 256
+      # NOTA: Esta función NO tiene VpcConfig - está fuera de la VPC
+      Environment:
+        Variables:
+          ENVIRONMENT: !Ref Environment
+          S3_BUCKET_NAME: !Ref UserDocumentsBucket
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - s3:PutObject
+                - s3:PutObjectAcl
+                - s3:GetObject
+              Resource: !Sub "${UserDocumentsBucket.Arn}/*"
+            - Effect: Allow
+              Action:
+                - logs:CreateLogGroup
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+              Resource: "*"
+      Events:
+        GetUploadUrls:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ImpulsameApi
+            Path: /request/files/get-upload-urls
+            Method: POST
+        OptionsRequest:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ImpulsameApi
+            Path: /request/files/get-upload-urls
+            Method: OPTIONS
+
   # S3 Bucket para documentos de usuarios
   UserDocumentsBucket:
     Type: AWS::S3::Bucket
@@ -190,7 +234,7 @@ Resources:
             Principal: "*"
             Action: s3:GetObject
             Resource: !Sub "${UserDocumentsBucket.Arn}/*"
-          - Sid: AllowLambdaWrite
+          - Sid: AllowUsersRegisterLambdaWrite
             Effect: Allow
             Principal:
               AWS: !GetAtt UsersRegisterFunctionRole.Arn
@@ -199,12 +243,21 @@ Resources:
               - s3:PutObjectAcl
               - s3:DeleteObject
             Resource: !Sub "${UserDocumentsBucket.Arn}/*"
-          - Sid: AllowLambdaList
+          - Sid: AllowUsersRegisterLambdaList
             Effect: Allow
             Principal:
               AWS: !GetAtt UsersRegisterFunctionRole.Arn
             Action: s3:ListBucket
             Resource: !GetAtt UserDocumentsBucket.Arn
+          - Sid: AllowRequestFilesLambdaWrite
+            Effect: Allow
+            Principal:
+              AWS: !GetAtt RequestFilesGetUploadUrlsFunctionRole.Arn
+            Action: 
+              - s3:PutObject
+              - s3:PutObjectAcl
+              - s3:GetObject
+            Resource: !Sub "${UserDocumentsBucket.Arn}/*"
 
 Outputs:
   ImpulsameApi:
@@ -218,6 +271,18 @@ Outputs:
     Value: !GetAtt UsersRegisterFunction.Arn
     Export:
       Name: !Sub "${Environment}-users-register-function-arn"
+
+  RequestFilesGetUploadUrlsFunction:
+    Description: "Request Files Get Upload URLs Lambda Function ARN"
+    Value: !GetAtt RequestFilesGetUploadUrlsFunction.Arn
+    Export:
+      Name: !Sub "${Environment}-request-files-get-upload-urls-function-arn"
+
+  RequestFilesGetUploadUrlsApi:
+    Description: "API Gateway endpoint URL for Request Files Get Upload URLs function"
+    Value: !Sub "https://${ImpulsameApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/request/files/get-upload-urls"
+    Export:
+      Name: !Sub "${Environment}-request-files-get-upload-urls-api-url"
 
   UserDocumentsBucket:
     Description: "S3 Bucket for user documents"
