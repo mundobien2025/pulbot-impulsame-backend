@@ -144,7 +144,7 @@ Resources:
     Properties:
       FunctionName: !Sub "${Environment}-request-files-get-upload-urls"
       CodeUri: lambdas/request-files-get-upload-urls/
-      Handler: lambda_function.lambda_handler
+      Handler: app.lambda_handler
       Runtime: python3.13
       Timeout: 30
       MemorySize: 256
@@ -207,7 +207,7 @@ Resources:
     Properties:
       FunctionName: !Sub "${Environment}-request-files-get-upload-urls"
       CodeUri: lambdas/request-files-get-upload-urls/
-      Handler: lambda_function.lambda_handler
+      Handler: app.lambda_handler
       Runtime: python3.13
       Timeout: 30
       MemorySize: 256
