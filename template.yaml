@@ -142,7 +142,7 @@ Resources:
   RequestFilesGetUploadUrlsFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub "${Environment}-request-files-get-upload-urls-v2"  # Cambiar nombre para forzar recreación
+      FunctionName: !Sub "${Environment}-request-files-get-upload-urls"  # Volver al nombre original
       CodeUri: lambdas/request-files-get-upload-urls/
       Handler: app.lambda_handler
       Runtime: python3.13
