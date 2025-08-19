@@ -22,7 +22,7 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
       with:
-        fetch-depth: 0 # Fetch full history for changelog generation
+        fetch-depth: 0
 
     - name: Generate Changelog
       id: changelog
@@ -84,21 +84,20 @@ jobs:
         elif [ "${{ github.ref }}" = "refs/heads/dev" ]; then
           echo "ENVIRONMENT=dev" >> $GITHUB_ENV
         else
-          echo "ENVIRONMENT=dev" >> $GITHUB_ENV  # Por defecto dev para feature branches
+          echo "ENVIRONMENT=dev" >> $GITHUB_ENV
         fi
 
     - name: Install dependencies in layer
       run: |
         mkdir -p layers/python-deps/python
         pip install -r lambdas/users-register-post/requirements.txt -t layers/python-deps/python/
-        # Instalar dependencias del nuevo lambda si tiene requirements.txt separado
         if [ -f lambdas/request-files-get-upload-urls/requirements.txt ]; then
           pip install -r lambdas/request-files-get-upload-urls/requirements.txt -t layers/python-deps/python/
         fi
 
     - name: Build SAM application
       run: |
-        sam build --use-container --template-file template.yaml
+        sam build --use-container
 
     - name: Create S3 bucket for SAM artifacts (if not exists)
       run: |
@@ -173,7 +172,6 @@ jobs:
         echo "API Gateway URL: $API_URL"
         echo "::notice::API Gateway deployed at $API_URL"
         
-        # Mostrar la URL del nuevo endpoint
         UPLOAD_URL="${API_URL}request/files/get-upload-urls"
         echo "Upload URLs Endpoint: $UPLOAD_URL"
         echo "::notice::File Upload URLs endpoint available at $UPLOAD_URL"
@@ -182,12 +180,10 @@ jobs:
       run: |
         BUCKET_NAME="${{ env.ENVIRONMENT }}-impulsame-user-documents.pulbot.store"
         
-        # Upload index.html
         aws s3 cp static-files/index.html s3://$BUCKET_NAME/index.html \
           --content-type "text/html" \
           --cache-control "max-age=300"
         
-        # Get website URL
         WEBSITE_URL=$(aws cloudformation describe-stacks \
           --stack-name ${{ env.ENVIRONMENT }}-impulsame-backend \
           --query 'Stacks[0].Outputs[?OutputKey==`UserDocumentsBucketWebsiteUrl`].OutputValue' \
