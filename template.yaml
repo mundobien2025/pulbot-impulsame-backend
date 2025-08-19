@@ -148,7 +148,10 @@ Resources:
       Runtime: python3.13
       Timeout: 30
       MemorySize: 256
-      # NOTA: Esta función NO tiene VpcConfig - está fuera de la VPC
+      # IMPORTANTE: Sobrescribo la configuración VPC de Globals para que NO tenga VPC
+      VpcConfig: {}
+      # NO usa el Layer porque no necesita dependencias de DB
+      Layers: []
       Environment:
         Variables:
           ENVIRONMENT: !Ref Environment
