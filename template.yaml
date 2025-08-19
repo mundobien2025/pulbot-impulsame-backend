@@ -138,20 +138,81 @@ Resources:
             Path: /users/register
             Method: post
 
-  # Función Lambda: Request Files Get Upload URLs (SIN VPC)
+  # Función Lambda: Request Files Get Upload URLs (ANULAR VPC EXPLÍCITAMENTE)
   RequestFilesGetUploadUrlsFunction:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub "${Environment}-request-files-get-upload-urls"
       CodeUri: lambdas/request-files-get-upload-urls/
-      Handler: app.lambda_handler
+      Handler: lambda_function.lambda_handler
       Runtime: python3.13
       Timeout: 30
       MemorySize: 256
+      # ESTRATEGIA: Anular EXPLÍCITAMENTE la configuración VPC heredada de Globals
       VpcConfig:
         SecurityGroupIds: []
         SubnetIds: []
+      # Anular EXPLÍCITAMENTE los Layers heredados de Globals  
       Layers: []
+      Environment:
+        Variables:
+          ENVIRONMENT: !Ref Environment
+          S3_BUCKET_NAME: !Ref UserDocumentsBucket
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - s3:PutObject
+                - s3:PutObjectAcl
+                - s3:GetObject
+              Resource: !Sub "${UserDocumentsBucket.Arn}/*"
+            - Effect: Allow
+              Action:
+                - logs:CreateLogGroup
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+              Resource: "*"
+      Events:
+        GetUploadUrls:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ImpulsameApi
+            Path: /request/files/get-upload-urls
+            Method: POST
+        OptionsRequest:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ImpulsameApi
+            Path: /request/files/get-upload-urls
+            Method: OPTIONS- Effect: Allow
+              Action:
+                - ec2:CreateNetworkInterface
+                - ec2:DescribeNetworkInterfaces
+                - ec2:DeleteNetworkInterface
+                - ec2:AttachNetworkInterface
+                - ec2:DetachNetworkInterface
+              Resource: "*"
+      Events:
+        RegisterApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ImpulsameApi
+            Path: /users/register
+            Method: post
+
+  # Función Lambda: Request Files Get Upload URLs (SIN VPC - CONFIGURACIÓN INDEPENDIENTE)
+  RequestFilesGetUploadUrlsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${Environment}-request-files-get-upload-urls"
+      CodeUri: lambdas/request-files-get-upload-urls/
+      Handler: lambda_function.lambda_handler
+      Runtime: python3.13
+      Timeout: 30
+      MemorySize: 256
+      # CONFIGURACIÓN INDEPENDIENTE - NO HEREDA DE GLOBALS
+      # Sin VpcConfig, sin Layers de DB
       Environment:
         Variables:
           ENVIRONMENT: !Ref Environment
