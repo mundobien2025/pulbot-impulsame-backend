@@ -1,3 +1,4 @@
+
 name: Deploy Backend to AWS
 
 on:
@@ -19,387 +20,176 @@ jobs:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-    - name: Generate Changelog
-      id: changelog
-      uses: TriPSs/conventional-changelog-action@v5
-      with:
-        github-token: ${{ secrets.GITHUB_TOKEN }}
-        output-file: 'CHANGELOG.md'
-        release-count: '10'
-        version-file: 'package.json'
-        version-path: 'version'
-        create-summary: 'true'
-        skip-on-empty: 'true'
-        skip-version-file: 'false'
-        skip-commit: 'false'
-        git-message: 'chore(release): {version} [skip ci]'
-        preset: 'angular'
+      - name: Generate Changelog
+        id: changelog
+        uses: TriPSs/conventional-changelog-action@v5
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          output-file: 'CHANGELOG.md'
+          release-count: '10'
+          version-file: 'package.json'
+          version-path: 'version'
+          create-summary: 'true'
+          skip-on-empty: 'true'
+          skip-version-file: 'false'
+          skip-commit: 'false'
+          git-message: 'chore(release): {version} [skip ci]'
+          preset: 'angular'
 
-    - name: Create Release
-      uses: actions/create-release@v1
-      if: ${{ steps.changelog.outputs.skipped == 'false' }}
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: ${{ steps.changelog.outputs.tag }}
-        release_name: ${{ steps.changelog.outputs.tag }}
-        body: ${{ steps.changelog.outputs.clean_changelog }}
-        draft: false
-        prerelease: false
+      - name: Create Release
+        uses: actions/create-release@v1
+        if: ${{ steps.changelog.outputs.skipped == 'false' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.changelog.outputs.tag }}
+          release_name: ${{ steps.changelog.outputs.tag }}
+          body: ${{ steps.changelog.outputs.clean_changelog }}
+          draft: false
+          prerelease: false
 
   deploy:
     runs-on: ubuntu-latest
     needs: [generate-changelog]
     if: always() && (needs.generate-changelog.result == 'success' || needs.generate-changelog.result == 'skipped')
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.13'
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
 
-    - name: Set up AWS SAM CLI
-      uses: aws-actions/setup-sam@v2
-      with:
-        use-installer: true
+      - name: Set up AWS SAM CLI
+        uses: aws-actions/setup-sam@v2
+        with:
+          use-installer: true
 
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ env.AWS_REGION }}
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
 
-    - name: Set environment based on branch
-      run: |
-        if [ "${{ github.ref }}" = "refs/heads/main" ]; then
-          echo "ENVIRONMENT=main" >> $GITHUB_ENV
-        elif [ "${{ github.ref }}" = "refs/heads/dev" ]; then
-          echo "ENVIRONMENT=dev" >> $GITHUB_ENV
-        else
-          echo "ENVIRONMENT=dev" >> $GITHUB_ENV
-        fi
+      - name: Set environment based on branch
+        run: |
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            echo "ENVIRONMENT=main" >> $GITHUB_ENV
+          elif [ "${{ github.ref }}" = "refs/heads/dev" ]; then
+            echo "ENVIRONMENT=dev" >> $GITHUB_ENV
+          else
+            echo "ENVIRONMENT=dev" >> $GITHUB_ENV
+          fi
 
-    - name: Install dependencies in layer
-      run: |
-        mkdir -p layers/python-deps/python
-        pip install -r lambdas/users-register-post/requirements.txt -t layers/python-deps/python/
-        if [ -f lambdas/request-files-get-upload-urls/requirements.txt ]; then
-          pip install -r lambdas/request-files-get-upload-urls/requirements.txt -t layers/python-deps/python/
-        fi
+      - name: Install dependencies in layer
+        run: |
+          mkdir -p layers/python-deps/python
+          pip install -r lambdas/users-register-post/requirements.txt -t layers/python-deps/python/
+          if [ -f lambdas/request-files-get-upload-urls/requirements.txt ]; then
+            pip install -r lambdas/request-files-get-upload-urls/requirements.txt -t layers/python-deps/python/
+          fi
 
-    - name: Build SAM application
-      run: |
-        sam build --use-container
+      - name: Build SAM application
+        run: |
+          sam build --use-container
 
-    - name: Create S3 bucket for SAM artifacts (if not exists)
-      run: |
-        BUCKET_NAME="sam-artifacts-${{ env.ENVIRONMENT }}-impulsame"
-        aws s3 mb s3://$BUCKET_NAME --region ${{ env.AWS_REGION }} || echo "Bucket already exists"
+      - name: Create S3 bucket for SAM artifacts
+        run: |
+          BUCKET_NAME="sam-artifacts-${{ env.ENVIRONMENT }}-impulsame"
+          aws s3 mb s3://$BUCKET_NAME --region ${{ env.AWS_REGION }} || echo "Bucket already exists"
 
-    - name: Check and fix CloudFormation stack state
-      run: |
-        STACK_NAME="${{ env.ENVIRONMENT }}-impulsame-backend"
-        STACK_STATUS=$(aws cloudformation describe-stacks \
-          --stack-name $STACK_NAME \
-          --region ${{ env.AWS_REGION }} \
-          --query 'Stacks[0].StackStatus' \
-          --output text 2>/dev/null || echo "STACK_NOT_EXISTS")
-        
-        echo "Stack status: $STACK_STATUS"
-        
-        if [ "$STACK_STATUS" = "ROLLBACK_COMPLETE" ]; then
-          echo "Stack is in ROLLBACK_COMPLETE state. Deleting stack..."
-          aws cloudformation delete-stack \
+      - name: Check CloudFormation stack state
+        run: |
+          STACK_NAME="${{ env.ENVIRONMENT }}-impulsame-backend"
+          STACK_STATUS=$(aws cloudformation describe-stacks \
             --stack-name $STACK_NAME \
-            --region ${{ env.AWS_REGION }}
+            --region ${{ env.AWS_REGION }} \
+            --query 'Stacks[0].StackStatus' \
+            --output text 2>/dev/null || echo "STACK_NOT_EXISTS")
           
-          echo "Waiting for stack deletion to complete..."
-          aws cloudformation wait stack-delete-complete \
-            --stack-name $STACK_NAME \
-            --region ${{ env.AWS_REGION }}
+          echo "Stack status: $STACK_STATUS"
           
-          echo "Stack deleted successfully"
-        elif [ "$STACK_STATUS" = "DELETE_FAILED" ]; then
-          echo "Stack deletion failed previously. Manual intervention required."
-          exit 1
-        fi
+          if [ "$STACK_STATUS" = "ROLLBACK_COMPLETE" ]; then
+            echo "Stack is in ROLLBACK_COMPLETE state. Deleting stack..."
+            aws cloudformation delete-stack \
+              --stack-name $STACK_NAME \
+              --region ${{ env.AWS_REGION }}
+            
+            echo "Waiting for stack deletion to complete..."
+            aws cloudformation wait stack-delete-complete \
+              --stack-name $STACK_NAME \
+              --region ${{ env.AWS_REGION }}
+            
+            echo "Stack deleted successfully"
+          elif [ "$STACK_STATUS" = "DELETE_FAILED" ]; then
+            echo "Stack deletion failed previously. Manual intervention required."
+            exit 1
+          fi
 
-    - name: Deploy SAM application
-      run: |
-        if [ "${{ env.ENVIRONMENT }}" = "dev" ]; then
-          sam deploy --config-env dev \
-            --parameter-overrides \
-              Environment=dev \
-              DbHost="${{ secrets.DEV_DB_HOST }}" \
-              DbUser="${{ secrets.DEV_DB_USER }}" \
-              DbPass="${{ secrets.DEV_DB_PASS }}" \
-              DbName="${{ secrets.DEV_DB_NAME }}" \
-              VpcId="${{ secrets.VPC_ID }}" \
-              SubnetId1="${{ secrets.SUBNET_ID_1 }}" \
-              SubnetId2="${{ secrets.SUBNET_ID_2 || '' }}" \
-              SubnetId3="${{ secrets.SUBNET_ID_3 || '' }}" \
-              SecurityGroupId="${{ secrets.SECURITY_GROUP_ID }}"
-        else
-          sam deploy --config-env main \
-            --parameter-overrides \
-              Environment=main \
-              DbHost="${{ secrets.MAIN_DB_HOST }}" \
-              DbUser="${{ secrets.MAIN_DB_USER }}" \
-              DbPass="${{ secrets.MAIN_DB_PASS }}" \
-              DbName="${{ secrets.MAIN_DB_NAME }}" \
-              VpcId="${{ secrets.VPC_ID }}" \
-              SubnetId1="${{ secrets.SUBNET_ID_1 }}" \
-              SubnetId2="${{ secrets.SUBNET_ID_2 || '' }}" \
-              SubnetId3="${{ secrets.SUBNET_ID_3 || '' }}" \
-              SecurityGroupId="${{ secrets.SECURITY_GROUP_ID }}"
-        fi
+      - name: Deploy SAM application
+        run: |
+          if [ "${{ env.ENVIRONMENT }}" = "dev" ]; then
+            sam deploy --config-env dev \
+              --parameter-overrides \
+                Environment=dev \
+                DbHost="${{ secrets.DEV_DB_HOST }}" \
+                DbUser="${{ secrets.DEV_DB_USER }}" \
+                DbPass="${{ secrets.DEV_DB_PASS }}" \
+                DbName="${{ secrets.DEV_DB_NAME }}" \
+                VpcId="${{ secrets.VPC_ID }}" \
+                SubnetId1="${{ secrets.SUBNET_ID_1 }}" \
+                SubnetId2="${{ secrets.SUBNET_ID_2 || '' }}" \
+                SubnetId3="${{ secrets.SUBNET_ID_3 || '' }}" \
+                SecurityGroupId="${{ secrets.SECURITY_GROUP_ID }}"
+          else
+            sam deploy --config-env main \
+              --parameter-overrides \
+                Environment=main \
+                DbHost="${{ secrets.MAIN_DB_HOST }}" \
+                DbUser="${{ secrets.MAIN_DB_USER }}" \
+                DbPass="${{ secrets.MAIN_DB_PASS }}" \
+                DbName="${{ secrets.MAIN_DB_NAME }}" \
+                VpcId="${{ secrets.VPC_ID }}" \
+                SubnetId1="${{ secrets.SUBNET_ID_1 }}" \
+                SubnetId2="${{ secrets.SUBNET_ID_2 || '' }}" \
+                SubnetId3="${{ secrets.SUBNET_ID_3 || '' }}" \
+                SecurityGroupId="${{ secrets.SECURITY_GROUP_ID }}"
+          fi
 
-    - name: Get API Gateway URLs
-      run: |
-        API_URL=$(aws cloudformation describe-stacks \
-          --stack-name ${{ env.ENVIRONMENT }}-impulsame-backend \
-          --query 'Stacks[0].Outputs[?OutputKey==`ImpulsameApi`].OutputValue' \
-          --output text \
-          --region ${{ env.AWS_REGION }})
-        echo "API Gateway URL: $API_URL"
-        echo "::notice::API Gateway deployed at $API_URL"
-        
-        UPLOAD_URL="${API_URL}request/files/get-upload-urls"
-        echo "Upload URLs Endpoint: $UPLOAD_URL"
-        echo "::notice::File Upload URLs endpoint available at $UPLOAD_URL"
-
-    - name: Upload static files to S3 bucket
-      run: |
-        BUCKET_NAME="${{ env.ENVIRONMENT }}-impulsame-user-documents.pulbot.store"
-        
-        aws s3 cp static-files/index.html s3://$BUCKET_NAME/index.html \
-          --content-type "text/html" \
-          --cache-control "max-age=300"
-        
-        WEBSITE_URL=$(aws cloudformation describe-stacks \
-          --stack-name ${{ env.ENVIRONMENT }}-impulsame-backend \
-          --query 'Stacks[0].Outputs[?OutputKey==`UserDocumentsBucketWebsiteUrl`].OutputValue' \
-          --output text \
-          --region ${{ env.AWS_REGION }})
-        
-        echo "S3 Website URL: $WEBSITE_URL"
-        echo "::notice::S3 Website available at $WEBSITE_URL"  uses: actions/setup-python@v5
-      with:
-        python-version: '3.13'
-
-    - name: Set up AWS SAM CLI
-      uses: aws-actions/setup-sam@v2
-      with:
-        use-installer: true
-
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ env.AWS_REGION }}
-
-    - name: Set environment based on branch
-      run: |
-        if [ "${{ github.ref }}" = "refs/heads/main" ]; then
-          echo "ENVIRONMENT=main" >> $GITHUB_ENV
-        elif [ "${{ github.ref }}" = "refs/heads/dev" ]; then
-          echo "ENVIRONMENT=dev" >> $GITHUB_ENV
-        else
-          echo "ENVIRONMENT=dev" >> $GITHUB_ENV  # Por defecto dev para feature branches
-        fi
-
-    - name: Install dependencies in layer
-      run: |
-        mkdir -p layers/python-deps/python
-        pip install -r lambdas/users-register-post/requirements.txt -t layers/python-deps/python/
-        # Instalar dependencias del nuevo lambda si tiene requirements.txt separado
-        if [ -f lambdas/request-files-get-upload-urls/requirements.txt ]; then
-          pip install -r lambdas/request-files-get-upload-urls/requirements.txt -t layers/python-deps/python/
-        fi
-
-    - name: Build SAM applications
-      run: |
-        # Build template principal (con VPC)
-        sam build --use-container --template-file template.yaml
-        
-        # Build template out-vpc (sin VPC)
-        sam build --use-container --template-file template_out_vpc.yaml --build-dir .aws-sam-out-vpc
-
-    - name: Create S3 buckets for SAM artifacts (if not exists)
-      run: |
-        # Bucket para template principal
-        BUCKET_NAME="sam-artifacts-${{ env.ENVIRONMENT }}-impulsame"
-        aws s3 mb s3://$BUCKET_NAME --region ${{ env.AWS_REGION }} || echo "Main bucket already exists"
-        
-        # Bucket para template out-vpc
-        BUCKET_NAME_OUT_VPC="sam-artifacts-${{ env.ENVIRONMENT }}-impulsame-out-vpc"
-        aws s3 mb s3://$BUCKET_NAME_OUT_VPC --region ${{ env.AWS_REGION }} || echo "Out-VPC bucket already exists"
-
-    - name: Check and fix CloudFormation stack states
-      run: |
-        # Check main stack
-        STACK_NAME="${{ env.ENVIRONMENT }}-impulsame-backend"
-        STACK_STATUS=$(aws cloudformation describe-stacks \
-          --stack-name $STACK_NAME \
-          --region ${{ env.AWS_REGION }} \
-          --query 'Stacks[0].StackStatus' \
-          --output text 2>/dev/null || echo "STACK_NOT_EXISTS")
-        
-        echo "Main stack status: $STACK_STATUS"
-        
-        if [ "$STACK_STATUS" = "ROLLBACK_COMPLETE" ]; then
-          echo "Main stack is in ROLLBACK_COMPLETE state. Deleting stack..."
-          aws cloudformation delete-stack \
-            --stack-name $STACK_NAME \
-            --region ${{ env.AWS_REGION }}
+      - name: Get API Gateway URLs
+        run: |
+          API_URL=$(aws cloudformation describe-stacks \
+            --stack-name ${{ env.ENVIRONMENT }}-impulsame-backend \
+            --query 'Stacks[0].Outputs[?OutputKey==`ImpulsameApi`].OutputValue' \
+            --output text \
+            --region ${{ env.AWS_REGION }})
+          echo "API Gateway URL: $API_URL"
+          echo "::notice::API Gateway deployed at $API_URL"
           
-          echo "Waiting for main stack deletion to complete..."
-          aws cloudformation wait stack-delete-complete \
-            --stack-name $STACK_NAME \
-            --region ${{ env.AWS_REGION }}
+          UPLOAD_URL="${API_URL}request/files/get-upload-urls"
+          echo "Upload URLs Endpoint: $UPLOAD_URL"
+          echo "::notice::File Upload URLs endpoint available at $UPLOAD_URL"
+
+      - name: Upload static files to S3 bucket
+        run: |
+          BUCKET_NAME="${{ env.ENVIRONMENT }}-impulsame-user-documents.pulbot.store"
           
-          echo "Main stack deleted successfully"
-        elif [ "$STACK_STATUS" = "DELETE_FAILED" ]; then
-          echo "Main stack deletion failed previously. Manual intervention required."
-          exit 1
-        fi
-        
-        # Check out-vpc stack
-        STACK_NAME_OUT_VPC="${{ env.ENVIRONMENT }}-impulsame-backend-out-vpc"
-        STACK_STATUS_OUT_VPC=$(aws cloudformation describe-stacks \
-          --stack-name $STACK_NAME_OUT_VPC \
-          --region ${{ env.AWS_REGION }} \
-          --query 'Stacks[0].StackStatus' \
-          --output text 2>/dev/null || echo "STACK_NOT_EXISTS")
-        
-        echo "Out-VPC stack status: $STACK_STATUS_OUT_VPC"
-        
-        if [ "$STACK_STATUS_OUT_VPC" = "ROLLBACK_COMPLETE" ]; then
-          echo "Out-VPC stack is in ROLLBACK_COMPLETE state. Deleting stack..."
-          aws cloudformation delete-stack \
-            --stack-name $STACK_NAME_OUT_VPC \
-            --region ${{ env.AWS_REGION }}
+          aws s3 cp static-files/index.html s3://$BUCKET_NAME/index.html \
+            --content-type "text/html" \
+            --cache-control "max-age=300"
           
-          echo "Waiting for out-VPC stack deletion to complete..."
-          aws cloudformation wait stack-delete-complete \
-            --stack-name $STACK_NAME_OUT_VPC \
-            --region ${{ env.AWS_REGION }}
+          WEBSITE_URL=$(aws cloudformation describe-stacks \
+            --stack-name ${{ env.ENVIRONMENT }}-impulsame-backend \
+            --query 'Stacks[0].Outputs[?OutputKey==`UserDocumentsBucketWebsiteUrl`].OutputValue' \
+            --output text \
+            --region ${{ env.AWS_REGION }})
           
-          echo "Out-VPC stack deleted successfully"
-        elif [ "$STACK_STATUS_OUT_VPC" = "DELETE_FAILED" ]; then
-          echo "Out-VPC stack deletion failed previously. Manual intervention required."
-          exit 1
-        fi
-
-    - name: Deploy main SAM application (with VPC)
-      run: |
-        if [ "${{ env.ENVIRONMENT }}" = "dev" ]; then
-          sam deploy --config-env dev \
-            --template-file template.yaml \
-            --parameter-overrides \
-              Environment=dev \
-              DbHost="${{ secrets.DEV_DB_HOST }}" \
-              DbUser="${{ secrets.DEV_DB_USER }}" \
-              DbPass="${{ secrets.DEV_DB_PASS }}" \
-              DbName="${{ secrets.DEV_DB_NAME }}" \
-              VpcId="${{ secrets.VPC_ID }}" \
-              SubnetId1="${{ secrets.SUBNET_ID_1 }}" \
-              SubnetId2="${{ secrets.SUBNET_ID_2 || '' }}" \
-              SubnetId3="${{ secrets.SUBNET_ID_3 || '' }}" \
-              SecurityGroupId="${{ secrets.SECURITY_GROUP_ID }}"
-        else
-          sam deploy --config-env main \
-            --template-file template.yaml \
-            --parameter-overrides \
-              Environment=main \
-              DbHost="${{ secrets.MAIN_DB_HOST }}" \
-              DbUser="${{ secrets.MAIN_DB_USER }}" \
-              DbPass="${{ secrets.MAIN_DB_PASS }}" \
-              DbName="${{ secrets.MAIN_DB_NAME }}" \
-              VpcId="${{ secrets.VPC_ID }}" \
-              SubnetId1="${{ secrets.SUBNET_ID_1 }}" \
-              SubnetId2="${{ secrets.SUBNET_ID_2 || '' }}" \
-              SubnetId3="${{ secrets.SUBNET_ID_3 || '' }}" \
-              SecurityGroupId="${{ secrets.SECURITY_GROUP_ID }}"
-        fi
-
-    - name: Get outputs from main stack for out-VPC deployment
-      run: |
-        # Get required outputs from main stack
-        API_GATEWAY_ID=$(aws cloudformation describe-stacks \
-          --stack-name ${{ env.ENVIRONMENT }}-impulsame-backend \
-          --query 'Stacks[0].Outputs[?OutputKey==`ImpulsameApi`].OutputValue' \
-          --output text \
-          --region ${{ env.AWS_REGION }} | cut -d'/' -f3 | cut -d'.' -f1)
-        
-        BUCKET_NAME=$(aws cloudformation describe-stacks \
-          --stack-name ${{ env.ENVIRONMENT }}-impulsame-backend \
-          --query 'Stacks[0].Outputs[?OutputKey==`UserDocumentsBucket`].OutputValue' \
-          --output text \
-          --region ${{ env.AWS_REGION }})
-        
-        BUCKET_ARN=$(aws cloudformation describe-stacks \
-          --stack-name ${{ env.ENVIRONMENT }}-impulsame-backend \
-          --query 'Stacks[0].Outputs[?OutputKey==`UserDocumentsBucketArn`].OutputValue' \
-          --output text \
-          --region ${{ env.AWS_REGION }})
-        
-        echo "API_GATEWAY_ID=$API_GATEWAY_ID" >> $GITHUB_ENV
-        echo "BUCKET_NAME=$BUCKET_NAME" >> $GITHUB_ENV
-        echo "BUCKET_ARN=$BUCKET_ARN" >> $GITHUB_ENV
-
-    - name: Deploy out-VPC SAM application (without VPC)
-      run: |
-        sam deploy --config-env ${{ env.ENVIRONMENT }} \
-          --template-file template_out_vpc.yaml \
-          --config-file samconfig_out_vpc.toml \
-          --build-dir .aws-sam-out-vpc \
-          --s3-bucket sam-artifacts-${{ env.ENVIRONMENT }}-impulsame-out-vpc \
-          --parameter-overrides \
-            Environment=${{ env.ENVIRONMENT }} \
-            UserDocumentsBucketName=${{ env.BUCKET_NAME }} \
-            UserDocumentsBucketArn=${{ env.BUCKET_ARN }} \
-            ApiGatewayId=${{ env.API_GATEWAY_ID }}
-
-    - name: Get API Gateway URLs
-      run: |
-        API_URL=$(aws cloudformation describe-stacks \
-          --stack-name ${{ env.ENVIRONMENT }}-impulsame-backend \
-          --query 'Stacks[0].Outputs[?OutputKey==`ImpulsameApi`].OutputValue' \
-          --output text \
-          --region ${{ env.AWS_REGION }})
-        echo "API Gateway URL: $API_URL"
-        echo "::notice::API Gateway deployed at $API_URL"
-        
-        # Mostrar la URL del nuevo endpoint
-        UPLOAD_URL="${API_URL}request/files/get-upload-urls"
-        echo "Upload URLs Endpoint: $UPLOAD_URL"
-        echo "::notice::File Upload URLs endpoint available at $UPLOAD_URL"
-
-    - name: Upload static files to S3 bucket
-      run: |
-        BUCKET_NAME="${{ env.ENVIRONMENT }}-impulsame-user-documents.pulbot.store"
-        
-        # Upload index.html
-        aws s3 cp static-files/index.html s3://$BUCKET_NAME/index.html \
-          --content-type "text/html" \
-          --cache-control "max-age=300"
-        
-        # Get website URL
-        WEBSITE_URL=$(aws cloudformation describe-stacks \
-          --stack-name ${{ env.ENVIRONMENT }}-impulsame-backend \
-          --query 'Stacks[0].Outputs[?OutputKey==`UserDocumentsBucketWebsiteUrl`].OutputValue' \
-          --output text \
-          --region ${{ env.AWS_REGION }})
-        
-        echo "S3 Website URL: $WEBSITE_URL"
-        echo "::notice::S3 Website available at $WEBSITE_URL"
+          echo "S3 Website URL: $WEBSITE_URL"
+          echo "::notice::S3 Website available at $WEBSITE_URL"
