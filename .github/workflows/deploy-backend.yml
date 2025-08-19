@@ -195,9 +195,7 @@ jobs:
           --region ${{ env.AWS_REGION }})
         
         echo "S3 Website URL: $WEBSITE_URL"
-        echo "::notice::S3 Website available at $WEBSITE_URL"  
-    - name: agregado por carlos    
-      uses: actions/setup-python@v5
+        echo "::notice::S3 Website available at $WEBSITE_URL"  uses: actions/setup-python@v5
       with:
         python-version: '3.13'
 
@@ -238,7 +236,7 @@ jobs:
         sam build --use-container --template-file template.yaml
         
         # Build template out-vpc (sin VPC)
-        #sam build --use-container --template-file template_out_vpc.yaml --build-dir .aws-sam-out-vpc
+        sam build --use-container --template-file template_out_vpc.yaml --build-dir .aws-sam-out-vpc
 
     - name: Create S3 buckets for SAM artifacts (if not exists)
       run: |
