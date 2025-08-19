@@ -1,0 +1,41 @@
+# SAM Config for Out-of-VPC Lambdas
+
+version = 0.1
+
+[default]
+[default.global.parameters]
+stack_name = "impulsame-backend-out-vpc"
+
+[default.build.parameters]
+cached = true
+parallel = true
+
+[default.deploy.parameters]
+capabilities = "CAPABILITY_IAM"
+confirm_changeset = false
+resolve_s3 = true
+fail_on_empty_changeset = false
+
+[dev]
+[dev.global.parameters]
+stack_name = "dev-impulsame-backend-out-vpc"
+
+[dev.deploy.parameters]
+capabilities = "CAPABILITY_IAM"
+confirm_changeset = false
+resolve_s3 = true
+s3_prefix = "dev-impulsame-backend-out-vpc"
+region = "us-east-1"
+fail_on_empty_changeset = false
+
+[main]
+[main.global.parameters]
+stack_name = "main-impulsame-backend-out-vpc"
+
+[main.deploy.parameters]
+capabilities = "CAPABILITY_IAM"
+confirm_changeset = false
+resolve_s3 = true
+s3_prefix = "main-impulsame-backend-out-vpc"
+region = "us-east-1"
+fail_on_empty_changeset = false

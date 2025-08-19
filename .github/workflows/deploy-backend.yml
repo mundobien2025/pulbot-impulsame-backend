@@ -8,6 +8,7 @@ on:
     paths:
       - 'lambdas/**'
       - 'template.yaml'
+      - 'template_out_vpc.yaml'
       - 'layers/**'
       - '.github/workflows/deploy-backend.yml'
 
@@ -96,17 +97,27 @@ jobs:
           pip install -r lambdas/request-files-get-upload-urls/requirements.txt -t layers/python-deps/python/
         fi
 
-    - name: Build SAM application
+    - name: Build SAM applications
       run: |
-        sam build --use-container
+        # Build template principal (con VPC)
+        sam build --use-container --template-file template.yaml
+        
+        # Build template out-vpc (sin VPC)
+        sam build --use-container --template-file template_out_vpc.yaml --build-dir .aws-sam-out-vpc
 
-    - name: Create S3 bucket for SAM artifacts (if not exists)
+    - name: Create S3 buckets for SAM artifacts (if not exists)
       run: |
+        # Bucket para template principal
         BUCKET_NAME="sam-artifacts-${{ env.ENVIRONMENT }}-impulsame"
-        aws s3 mb s3://$BUCKET_NAME --region ${{ env.AWS_REGION }} || echo "Bucket already exists"
+        aws s3 mb s3://$BUCKET_NAME --region ${{ env.AWS_REGION }} || echo "Main bucket already exists"
+        
+        # Bucket para template out-vpc
+        BUCKET_NAME_OUT_VPC="sam-artifacts-${{ env.ENVIRONMENT }}-impulsame-out-vpc"
+        aws s3 mb s3://$BUCKET_NAME_OUT_VPC --region ${{ env.AWS_REGION }} || echo "Out-VPC bucket already exists"
 
-    - name: Check and fix CloudFormation stack state
+    - name: Check and fix CloudFormation stack states
       run: |
+        # Check main stack
         STACK_NAME="${{ env.ENVIRONMENT }}-impulsame-backend"
         STACK_STATUS=$(aws cloudformation describe-stacks \
           --stack-name $STACK_NAME \
@@ -114,29 +125,57 @@ jobs:
           --query 'Stacks[0].StackStatus' \
           --output text 2>/dev/null || echo "STACK_NOT_EXISTS")
         
-        echo "Stack status: $STACK_STATUS"
+        echo "Main stack status: $STACK_STATUS"
         
         if [ "$STACK_STATUS" = "ROLLBACK_COMPLETE" ]; then
-          echo "Stack is in ROLLBACK_COMPLETE state. Deleting stack..."
+          echo "Main stack is in ROLLBACK_COMPLETE state. Deleting stack..."
           aws cloudformation delete-stack \
             --stack-name $STACK_NAME \
             --region ${{ env.AWS_REGION }}
           
-          echo "Waiting for stack deletion to complete..."
+          echo "Waiting for main stack deletion to complete..."
           aws cloudformation wait stack-delete-complete \
             --stack-name $STACK_NAME \
             --region ${{ env.AWS_REGION }}
           
-          echo "Stack deleted successfully"
+          echo "Main stack deleted successfully"
         elif [ "$STACK_STATUS" = "DELETE_FAILED" ]; then
-          echo "Stack deletion failed previously. Manual intervention required."
+          echo "Main stack deletion failed previously. Manual intervention required."
+          exit 1
+        fi
+        
+        # Check out-vpc stack
+        STACK_NAME_OUT_VPC="${{ env.ENVIRONMENT }}-impulsame-backend-out-vpc"
+        STACK_STATUS_OUT_VPC=$(aws cloudformation describe-stacks \
+          --stack-name $STACK_NAME_OUT_VPC \
+          --region ${{ env.AWS_REGION }} \
+          --query 'Stacks[0].StackStatus' \
+          --output text 2>/dev/null || echo "STACK_NOT_EXISTS")
+        
+        echo "Out-VPC stack status: $STACK_STATUS_OUT_VPC"
+        
+        if [ "$STACK_STATUS_OUT_VPC" = "ROLLBACK_COMPLETE" ]; then
+          echo "Out-VPC stack is in ROLLBACK_COMPLETE state. Deleting stack..."
+          aws cloudformation delete-stack \
+            --stack-name $STACK_NAME_OUT_VPC \
+            --region ${{ env.AWS_REGION }}
+          
+          echo "Waiting for out-VPC stack deletion to complete..."
+          aws cloudformation wait stack-delete-complete \
+            --stack-name $STACK_NAME_OUT_VPC \
+            --region ${{ env.AWS_REGION }}
+          
+          echo "Out-VPC stack deleted successfully"
+        elif [ "$STACK_STATUS_OUT_VPC" = "DELETE_FAILED" ]; then
+          echo "Out-VPC stack deletion failed previously. Manual intervention required."
           exit 1
         fi
 
-    - name: Deploy SAM application
+    - name: Deploy main SAM application (with VPC)
       run: |
         if [ "${{ env.ENVIRONMENT }}" = "dev" ]; then
           sam deploy --config-env dev \
+            --template-file template.yaml \
             --parameter-overrides \
               Environment=dev \
               DbHost="${{ secrets.DEV_DB_HOST }}" \
@@ -150,6 +189,7 @@ jobs:
               SecurityGroupId="${{ secrets.SECURITY_GROUP_ID }}"
         else
           sam deploy --config-env main \
+            --template-file template.yaml \
             --parameter-overrides \
               Environment=main \
               DbHost="${{ secrets.MAIN_DB_HOST }}" \
@@ -163,7 +203,45 @@ jobs:
               SecurityGroupId="${{ secrets.SECURITY_GROUP_ID }}"
         fi
 
-    - name: Get API Gateway URL
+    - name: Get outputs from main stack for out-VPC deployment
+      run: |
+        # Get required outputs from main stack
+        API_GATEWAY_ID=$(aws cloudformation describe-stacks \
+          --stack-name ${{ env.ENVIRONMENT }}-impulsame-backend \
+          --query 'Stacks[0].Outputs[?OutputKey==`ImpulsameApi`].OutputValue' \
+          --output text \
+          --region ${{ env.AWS_REGION }} | cut -d'/' -f3 | cut -d'.' -f1)
+        
+        BUCKET_NAME=$(aws cloudformation describe-stacks \
+          --stack-name ${{ env.ENVIRONMENT }}-impulsame-backend \
+          --query 'Stacks[0].Outputs[?OutputKey==`UserDocumentsBucket`].OutputValue' \
+          --output text \
+          --region ${{ env.AWS_REGION }})
+        
+        BUCKET_ARN=$(aws cloudformation describe-stacks \
+          --stack-name ${{ env.ENVIRONMENT }}-impulsame-backend \
+          --query 'Stacks[0].Outputs[?OutputKey==`UserDocumentsBucketArn`].OutputValue' \
+          --output text \
+          --region ${{ env.AWS_REGION }})
+        
+        echo "API_GATEWAY_ID=$API_GATEWAY_ID" >> $GITHUB_ENV
+        echo "BUCKET_NAME=$BUCKET_NAME" >> $GITHUB_ENV
+        echo "BUCKET_ARN=$BUCKET_ARN" >> $GITHUB_ENV
+
+    - name: Deploy out-VPC SAM application (without VPC)
+      run: |
+        sam deploy --config-env ${{ env.ENVIRONMENT }} \
+          --template-file template_out_vpc.yaml \
+          --config-file samconfig_out_vpc.toml \
+          --build-dir .aws-sam-out-vpc \
+          --s3-bucket sam-artifacts-${{ env.ENVIRONMENT }}-impulsame-out-vpc \
+          --parameter-overrides \
+            Environment=${{ env.ENVIRONMENT }} \
+            UserDocumentsBucketName=${{ env.BUCKET_NAME }} \
+            UserDocumentsBucketArn=${{ env.BUCKET_ARN }} \
+            ApiGatewayId=${{ env.API_GATEWAY_ID }}
+
+    - name: Get API Gateway URLs
       run: |
         API_URL=$(aws cloudformation describe-stacks \
           --stack-name ${{ env.ENVIRONMENT }}-impulsame-backend \

@@ -138,6 +138,22 @@ Resources:
             Path: /users/register
             Method: post
 
+  # LAMBDA DE UPLOAD URLs MOVIDO A template_out_vpc.yaml- Effect: Allow
+              Action:
+                - ec2:CreateNetworkInterface
+                - ec2:DescribeNetworkInterfaces
+                - ec2:DeleteNetworkInterface
+                - ec2:AttachNetworkInterface
+                - ec2:DetachNetworkInterface
+              Resource: "*"
+      Events:
+        RegisterApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ImpulsameApi
+            Path: /users/register
+            Method: post
+
   # Función Lambda: Request Files Get Upload URLs (SIN VPC - CONFIGURACIÓN INDEPENDIENTE)
   RequestFilesGetUploadUrlsFunction:
     Type: AWS::Serverless::Function
@@ -250,15 +266,7 @@ Resources:
               AWS: !GetAtt UsersRegisterFunctionRole.Arn
             Action: s3:ListBucket
             Resource: !GetAtt UserDocumentsBucket.Arn
-          - Sid: AllowRequestFilesLambdaWrite
-            Effect: Allow
-            Principal:
-              AWS: !GetAtt RequestFilesGetUploadUrlsFunctionRole.Arn
-            Action: 
-              - s3:PutObject
-              - s3:PutObjectAcl
-              - s3:GetObject
-            Resource: !Sub "${UserDocumentsBucket.Arn}/*"
+          # POLITICAS PARA UPLOAD URLs MOVIDAS A template_out_vpc.yaml
 
 Outputs:
   ImpulsameApi:
@@ -273,17 +281,7 @@ Outputs:
     Export:
       Name: !Sub "${Environment}-users-register-function-arn"
 
-  RequestFilesGetUploadUrlsFunction:
-    Description: "Request Files Get Upload URLs Lambda Function ARN"
-    Value: !GetAtt RequestFilesGetUploadUrlsFunction.Arn
-    Export:
-      Name: !Sub "${Environment}-request-files-get-upload-urls-function-arn"
-
-  RequestFilesGetUploadUrlsApi:
-    Description: "API Gateway endpoint URL for Request Files Get Upload URLs function"
-    Value: !Sub "https://${ImpulsameApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/request/files/get-upload-urls"
-    Export:
-      Name: !Sub "${Environment}-request-files-get-upload-urls-api-url"
+  # OUTPUTS PARA UPLOAD URLs MOVIDOS A template_out_vpc.yaml
 
   UserDocumentsBucket:
     Description: "S3 Bucket for user documents"
