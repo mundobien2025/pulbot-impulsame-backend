@@ -238,7 +238,7 @@ jobs:
         sam build --use-container --template-file template.yaml
         
         # Build template out-vpc (sin VPC)
-        sam build --use-container --template-file template_out_vpc.yaml --build-dir .aws-sam-out-vpc
+        #sam build --use-container --template-file template_out_vpc.yaml --build-dir .aws-sam-out-vpc
 
     - name: Create S3 buckets for SAM artifacts (if not exists)
       run: |
