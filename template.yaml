@@ -136,9 +136,7 @@ Resources:
           Properties:
             RestApiId: !Ref ImpulsameApi
             Path: /users/register
-            Method: post
-
-  # LAMBDA DE UPLOAD URLs MOVIDO A template_out_vpc.yaml- Effect: Allow
+            Method: post- Effect: Allow
               Action:
                 - ec2:CreateNetworkInterface
                 - ec2:DescribeNetworkInterfaces
